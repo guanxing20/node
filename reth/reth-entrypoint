@@ -10,15 +10,15 @@ METRICS_PORT="${METRICS_PORT:-6060}"
 DISCOVERY_PORT="${DISCOVERY_PORT:-30303}"
 P2P_PORT="${P2P_PORT:-30303}"
 ADDITIONAL_ARGS=""
-NODE_TYPE="${NODE_TYPE:-vanilla}"
+NODE_TYPE="${NODE_TYPE:-base}"
 
-if [[ -z "$RETH_CHAIN" ]]; then
+if [[ -z "${RETH_CHAIN:-}" ]]; then
     echo "expected RETH_CHAIN to be set" 1>&2
     exit 1
 fi
 
 # Add Flashblocks support for base mode
-if [[ "$NODE_TYPE" == "base" && -n "$RETH_FB_WEBSOCKET_URL" ]]; then
+if [[ "$NODE_TYPE" == "base" && -n "${RETH_FB_WEBSOCKET_URL:-}" ]]; then
     ADDITIONAL_ARGS="--websocket-url=$RETH_FB_WEBSOCKET_URL"
     echo "Enabling Flashblocks support with endpoint: $RETH_FB_WEBSOCKET_URL"
 fi
@@ -28,14 +28,20 @@ if [[ "$NODE_TYPE" == "base" ]]; then
     echo "Starting Base Reth node"
     BINARY="./base-reth-node"
 else
-    echo "Starting vanilla Reth node"
+    echo "Starting OP Reth node"
     BINARY="./op-reth"
 fi
 
-mkdir -p $RETH_DATA_DIR
+# Add pruning for base
+if [[ "$NODE_TYPE" == "base" && "${RETH_PRUNING_ARGS+x}" = x ]]; then
+    echo "Adding pruning arguments: $RETH_PRUNING_ARGS"
+    ADDITIONAL_ARGS="$ADDITIONAL_ARGS $RETH_PRUNING_ARGS"
+fi
+
+mkdir -p "$RETH_DATA_DIR"
 echo "$OP_NODE_L2_ENGINE_AUTH_RAW" > "$OP_NODE_L2_ENGINE_AUTH"
 
-exec $BINARY node \
+exec "$BINARY" node \
   -vvv \
   --datadir="$RETH_DATA_DIR" \
   --log.stdout.format json \
@@ -43,12 +49,12 @@ exec $BINARY node \
   --ws.origins="*" \
   --ws.addr=0.0.0.0 \
   --ws.port="$WS_PORT" \
-  --ws.api=debug,eth,net,txpool \
+  --ws.api=web3,debug,eth,net,txpool \
   --http \
   --http.corsdomain="*" \
   --http.addr=0.0.0.0 \
   --http.port="$RPC_PORT" \
-  --http.api=debug,eth,net,txpool,miner \
+  --http.api=web3,debug,eth,net,txpool,miner \
   --ipcpath="$IPC_PATH" \
   --authrpc.addr=0.0.0.0 \
   --authrpc.port="$AUTHRPC_PORT" \
@@ -56,7 +62,7 @@ exec $BINARY node \
   --metrics=0.0.0.0:"$METRICS_PORT" \
   --max-outbound-peers=100 \
   --chain "$RETH_CHAIN" \
-  --rollup.sequencer-http=$RETH_SEQUENCER_HTTP \
+  --rollup.sequencer-http="$RETH_SEQUENCER_HTTP" \
   --rollup.disable-tx-pool-gossip \
   --discovery.port="$DISCOVERY_PORT" \
   --port="$P2P_PORT" \

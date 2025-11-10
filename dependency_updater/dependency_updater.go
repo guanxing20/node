@@ -64,7 +64,7 @@ func main() {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			err := updater(string(cmd.String("token")), string(cmd.String("repo")), cmd.Bool("commit"), cmd.Bool("github-action"))
+			err := updater(cmd.String("token"), cmd.String("repo"), cmd.Bool("commit"), cmd.Bool("github-action"))
 			if err != nil {
 				return fmt.Errorf("failed to run updater: %s", err)
 			}
@@ -92,7 +92,7 @@ func updater(token string, repoPath string, commit bool, githubAction bool) erro
 
 	err = json.Unmarshal(f, &dependencies)
 	if err != nil {
-		return fmt.Errorf("error unmarshaling versions JSON to dependencies: %s", err)
+		return fmt.Errorf("error unmarshalling versions JSON to dependencies: %s", err)
 	}
 
 	for dependency := range dependencies {
@@ -133,23 +133,26 @@ func updater(token string, repoPath string, commit bool, githubAction bool) erro
 
 func createCommitMessage(updatedDependencies []VersionUpdateInfo, repoPath string, githubAction bool) error {
 	var repos []string
+	descriptionLines := []string{
+		"### Dependency Updates",
+	}
+
 	commitTitle := "chore: updated "
-	commitDescription := "Updated dependencies for: "
 
 	for _, dependency := range updatedDependencies {
 		repo, tag := dependency.Repo, dependency.To
-		commitDescription += repo + " => " + tag + " (" + dependency.DiffUrl + ") "
+		descriptionLines = append(descriptionLines, fmt.Sprintf("**%s** - %s:  [diff](%s)", repo, tag, dependency.DiffUrl))
 		repos = append(repos, repo)
 	}
-	commitDescription = strings.TrimSuffix(commitDescription, " ")
+	commitDescription := strings.Join(descriptionLines, "\n")
 	commitTitle += strings.Join(repos, ", ")
-	
+
 	if githubAction {
 		err := writeToGithubOutput(commitTitle, commitDescription, repoPath)
 		if err != nil {
 			return fmt.Errorf("error creating git commit message: %s", err)
 		}
-	} else if !githubAction {
+	} else {
 		cmd := exec.Command("git", "commit", "-am", commitTitle, "-m", commitDescription)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to run git commit -m: %s", err)
@@ -312,6 +315,10 @@ func createVersionsEnv(repoPath string, dependencies Dependencies) error {
 
 		dependencyPrefix := strings.ToUpper(dependency)
 
+		if dependencies[dependency].Tracking == "branch" {
+			dependencies[dependency].Tag = dependencies[dependency].Branch
+		}
+
 		envLines = append(envLines, fmt.Sprintf("export %s_%s=%s",
 			dependencyPrefix, "TAG", dependencies[dependency].Tag))
 
@@ -352,7 +359,8 @@ func writeToGithubOutput(title string, description string, repoPath string) erro
 		return fmt.Errorf("failed to write to GITHUB_OUTPUT file: %s", err)
 	}
 
-	descToWrite := fmt.Sprintf("%s=%s\n", "DESC", description)
+	delimiter := "EOF"
+	descToWrite := fmt.Sprintf("%s<<%s\n%s\n%s\n", "DESC", delimiter, description, delimiter)
 	_, err = f.WriteString(descToWrite)
 	if err != nil {
 		return fmt.Errorf("failed to write to GITHUB_OUTPUT file: %s", err)

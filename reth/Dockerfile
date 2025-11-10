@@ -1,4 +1,4 @@
-FROM golang:1.23 AS op
+FROM golang:1.24 AS op
 
 RUN curl -sSfL 'https://just.systems/install.sh' | bash -s -- --to /usr/local/bin
 
@@ -43,11 +43,11 @@ RUN . /tmp/versions.env && git clone $BASE_RETH_NODE_REPO . && \
 
 RUN cargo build --bin base-reth-node --release
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 RUN apt-get update && \
     apt-get install -y jq curl supervisor && \
-    rm -rf /var/lib/apt/lists
+    rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /var/log/supervisor
 
 WORKDIR /app
